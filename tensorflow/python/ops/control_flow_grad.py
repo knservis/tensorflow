@@ -190,14 +190,20 @@ def _EnterGrad(op, grad):
   grad_ctxt = graph._get_control_flow_context()
   # pylint: enable=protected-access
   if not grad_ctxt.back_prop:
-    # If the attribute `back_prop` is true, no gradient computation.
+    # Skip gradient computation, if the attribute `back_prop` is false.
+    return grad
+  if grad_ctxt.grad_state is None:
+    # Pass the gradient grough if we are not in a gradient while context.
     return grad
   if op.get_attr("is_constant"):
     # Add a gradient accumulator for each loop invariant.
-    if isinstance(grad, ops.IndexedSlices):
+    if isinstance(grad, ops.Tensor):
+      result = grad_ctxt.AddBackPropAccumulator(grad)
+    elif isinstance(grad, ops.IndexedSlices):
       result = grad_ctxt.AddBackPropIndexedSlicesAccumulator(grad)
     else:
-      result = grad_ctxt.AddBackPropAccumulator(grad)
+      # TODO(yuanbyu, lukasr): Add support for SparseTensor.
+      raise TypeError("Type %s not supported" % type(grad))
   else:
     result = exit(grad)
     grad_ctxt.ExitResult([result])
